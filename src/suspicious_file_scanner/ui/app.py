@@ -16,7 +16,7 @@ try:
     from ..core.hasher import compute_hashes
     from ..core.pe_parser import parse_pe
     from ..core.risk_score import compute_risk
-    from ..core.strings import extract_strings, find_suspicious_strings
+    from ..core.strings import extract_all_strings, find_suspicious_strings
 except ImportError:
     from core.elf_parser import parse_elf as _parse_elf
     from core.entropy import entropy_verdict, shannon_entropy
@@ -25,7 +25,7 @@ except ImportError:
     from core.hasher import compute_hashes
     from core.pe_parser import parse_pe
     from core.risk_score import compute_risk
-    from core.strings import extract_strings, find_suspicious_strings
+    from core.strings import extract_all_strings, find_suspicious_strings
 
 try:
     import flet as ft
@@ -56,7 +56,7 @@ def scan_file(path: str) -> dict:
     hashes = compute_hashes(data)
     ftype = detect_file_type(data, limits)
     entropy = shannon_entropy(data)
-    strings = extract_strings(data, limits=limits)
+    strings = extract_all_strings(data, limits=limits)
     suspicious_strings = find_suspicious_strings(strings)
     ext = _os.path.splitext(path)[1]
 
