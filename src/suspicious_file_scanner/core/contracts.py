@@ -70,4 +70,7 @@ def read_capped(path: str | Path, limits: SafetyLimits) -> bytes:
     if size > limits.max_file_size:
         raise ValueError(f"file too large: {size} bytes > {limits.max_file_size}")
     with open(p, "rb") as fh:
-        return fh.read(limits.max_file_size + 1)
+        data = fh.read(limits.max_file_size + 1)
+    if len(data) > limits.max_file_size:
+        raise ValueError(f"file too large: {len(data)} bytes > {limits.max_file_size}")
+    return data

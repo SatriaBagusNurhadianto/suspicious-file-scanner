@@ -124,3 +124,34 @@ def test_match_yara_oversized_bytes(limits):
         big = b"A" * (limits.max_file_size + 1)
         res = match_yara(big, rules_dir=str(rules), limits=limits)
         assert res["status"] == "error"
+
+
+@pytest.mark.skipif(not _YARA_AVAILABLE, reason="yara not installed")
+def test_match_yara_toc_tou_growth(limits):
+    # Simulate a file that grows between stat and read: stat reports small,
+    # actual content exceeds the cap. read_capped must reject post-read.
+    import unittest.mock as m
+
+    with tempfile.TemporaryDirectory() as d:
+        target = Path(d) / "growing.bin"
+        target.write_bytes(b"A" * (limits.max_file_size + 5))
+        rules = Path(d) / "rules"
+        rules.mkdir()
+        Path(rules, "r.yar").write_text('rule r { condition: true }')
+
+        real_stat = Path.stat
+
+        def fake_stat(self, *a, **k):
+            r = real_stat(self, *a, **k)
+            if self == target:
+                # report a tiny size to pass the pre-read check
+                class FakeStat:
+                    st_size = 1
+                    st_mode = r.st_mode
+
+                return FakeStat()
+            return r
+
+        with m.patch.object(Path, "stat", fake_stat):
+            res = match_yara(str(target), rules_dir=str(rules), limits=limits)
+        assert res["status"] == "error"
