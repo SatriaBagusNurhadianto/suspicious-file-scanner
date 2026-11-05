@@ -290,3 +290,52 @@ def test_safe_dest_toc_tou_revalidation_loop(monkeypatch):
     with tempfile.TemporaryDirectory() as d:
         with pytest.raises(ValueError, match="symlink"):
             _safe_dest(str(Path(d) / "sub" / "out.json"))
+
+
+def test_safe_dest_mixed_separators_linux():
+    import platform
+
+    if platform.system() != "Linux":
+        pytest.skip("Linux path semantics")
+    # On Linux, backslash is a legal filename char, so this is one component.
+    with tempfile.TemporaryDirectory() as d:
+        cwd = os.getcwd()
+        os.chdir(d)
+        try:
+            out = _safe_dest("a/b\c")
+            assert out.parts == ("a", "b" + chr(92) + "c")
+        finally:
+            os.chdir(cwd)
+
+
+def test_safe_dest_real_toc_tou_swap(monkeypatch):
+    # Real-filesystem swap: monkeypatch mkdir to plant an actual symlink after
+    # the directory is created, then assert re-validation rejects it.
+    can_symlink = True
+    with tempfile.TemporaryDirectory() as probe:
+        p = Path(probe) / "l"
+        try:
+            p.symlink_to(Path(probe))
+        except OSError:
+            can_symlink = False
+        if not can_symlink:
+            pytest.skip("symlink privilege unavailable")
+    real_mkdir = Path.mkdir
+
+    def fake_mkdir(self, *a, **k):
+        real_mkdir(self, *a, **k)
+        # Plant a real symlink at the final destination after its parent dir
+        # is created, so re-validation sees a real symlink.
+        try:
+            final = self / "out.json"
+            if not final.exists() and not final.is_symlink():
+                target = Path(tempfile.gettempdir()) / "toc_tou_target"
+                target.mkdir(exist_ok=True)
+                final.symlink_to(target)
+        except OSError:
+            pass
+
+    monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+    with tempfile.TemporaryDirectory() as d:
+        with pytest.raises(ValueError, match="symlink"):
+            _safe_dest(str(Path(d) / "sub" / "out.json"))
