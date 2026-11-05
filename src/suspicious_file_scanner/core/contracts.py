@@ -29,7 +29,15 @@ class SafetyLimits:
 
     @classmethod
     def from_env(cls) -> SafetyLimits:
-        max_size = int(os.environ.get("SFS_MAX_FILE_SIZE", 100 * 1024 * 1024))
+        raw = os.environ.get("SFS_MAX_FILE_SIZE", str(100 * 1024 * 1024))
+        try:
+            max_size = int(raw)
+        except ValueError:
+            max_size = 100 * 1024 * 1024
+        # Clamp: reject non-positive and cap at 1 GiB to prevent DoS via env.
+        if max_size <= 0:
+            max_size = 100 * 1024 * 1024
+        max_size = min(max_size, 1 * 1024 * 1024 * 1024)
         strict = os.environ.get("SFS_STRICT_MODE", "").strip() == "1"
         return cls(max_file_size=max_size, strict_mode=strict)
 
@@ -55,11 +63,11 @@ def is_path_like(value: object) -> bool:
 def read_capped(path: str | Path, limits: SafetyLimits) -> bytes:
     """Read *path* into memory, enforcing ``max_file_size``."""
     p = Path(path)
+    # Reject symlinks first (TOCTOU-safe-ish: check before stat).
+    if p.is_symlink():
+        raise ValueError("symlinks are not allowed")
     size = p.stat().st_size
     if size > limits.max_file_size:
         raise ValueError(f"file too large: {size} bytes > {limits.max_file_size}")
-    # Reject symlinks to avoid traversal into sensitive locations.
-    if p.is_symlink():
-        raise ValueError("symlinks are not allowed")
     with open(p, "rb") as fh:
         return fh.read(limits.max_file_size + 1)

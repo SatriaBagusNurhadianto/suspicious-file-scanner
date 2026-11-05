@@ -95,8 +95,10 @@ def scan_file(path: str) -> dict:
     return report
 
 
-def parse_elf_safe(path: str) -> dict:
-    return _parse_elf(path)
+def parse_elf_safe(path: str):
+    from ..core.contracts import SafetyLimits
+
+    return _parse_elf(path, SafetyLimits.from_env())
 
 
 def run() -> None:

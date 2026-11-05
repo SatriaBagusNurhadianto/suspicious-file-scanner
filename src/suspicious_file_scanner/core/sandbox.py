@@ -10,6 +10,15 @@ from .contracts import ParseResult, SafetyLimits
 
 
 def _worker(func: Callable, data: bytes, limits: SafetyLimits, queue: Any) -> None:
+    # Best-effort resource caps on Unix.
+    try:
+        import resource
+
+        cpu = int(limits.timeout_seconds) + 1
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+        resource.setrlimit(resource.RLIMIT_AS, (limits.max_file_size * 4, limits.max_file_size * 4))
+    except (ImportError, ValueError, OSError):
+        pass
     try:
         result = func(data, limits)
         queue.put(("ok", result))
