@@ -35,7 +35,7 @@ def parse_elf(path: str | Path) -> dict:
                 )
 
             imports: list[str] = []
-            dyn = elf.get_section_by_name(".dynstr")
+            elf.get_section_by_name(".dynstr")
             symtab = elf.get_section_by_name(".dynsym")
             if symtab is not None:
                 for sym in symtab.iter_symbols():

@@ -11,8 +11,8 @@ def compute_hashes(path: str | Path) -> dict[str, str]:
 
     Reads the file in chunks so large files do not exhaust memory.
     """
-    md5 = hashlib.md5()
-    sha1 = hashlib.sha1()
+    md5 = hashlib.md5()  # noqa: S324
+    sha1 = hashlib.sha1()  # noqa: S324
     sha256 = hashlib.sha256()
 
     with open(path, "rb") as fh:

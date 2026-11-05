@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 try:
+    from ..core.elf_parser import parse_elf as _parse_elf
     from ..core.entropy import entropy_verdict, file_entropy
     from ..core.exporter import export_json, export_pdf
     from ..core.filetype import detect_file_type
@@ -16,8 +17,8 @@ try:
     from ..core.pe_parser import parse_pe
     from ..core.risk_score import compute_risk
     from ..core.strings import extract_strings, find_suspicious_strings
-    from ..core.elf_parser import parse_elf as _parse_elf
 except ImportError:
+    from core.elf_parser import parse_elf as _parse_elf
     from core.entropy import entropy_verdict, file_entropy
     from core.exporter import export_json, export_pdf
     from core.filetype import detect_file_type
@@ -25,7 +26,6 @@ except ImportError:
     from core.pe_parser import parse_pe
     from core.risk_score import compute_risk
     from core.strings import extract_strings, find_suspicious_strings
-    from core.elf_parser import parse_elf as _parse_elf
 
 try:
     import flet as ft
@@ -78,7 +78,7 @@ def run() -> None:
         print("Flet is not installed. Install with: pip install flet")
         return
 
-    def main(page: "ft.Page") -> None:
+    def main(page: ft.Page) -> None:
         page.title = "Suspicious File Scanner"
         page.window_width = 900
         page.window_height = 700
@@ -86,7 +86,7 @@ def run() -> None:
         status = ft.Text("Drop a file or use the picker.", size=14)
         results = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
 
-        def on_file_picked(e: "ft.FilePickerResultEvent") -> None:
+        def on_file_picked(e: ft.FilePickerResultEvent) -> None:
             if not e.files:
                 return
             path = e.files[0].path
@@ -112,14 +112,23 @@ def run() -> None:
             results.controls.clear()
             results.controls.append(ft.Text(f"File: {report['file']}", weight=ft.FontWeight.BOLD))
             results.controls.append(ft.Text(f"Type: {report['file_type']}"))
-            results.controls.append(ft.Text(f"Risk: {report['risk_score']}/100 ({report['risk_level']})"))
+            results.controls.append(
+                ft.Text(f"Risk: {report['risk_score']}/100 ({report['risk_level']})")
+            )
             for r in report["risk_reasons"]:
                 results.controls.append(ft.Text(f"  - {r}", size=12))
             results.controls.append(ft.Text("Hashes:"))
             for k, v in report["hashes"].items():
                 results.controls.append(ft.Text(f"  {k}: {v}", size=12))
-            results.controls.append(ft.Text(f"Entropy: {report['entropy']} ({report['entropy_verdict']})"))
-            results.controls.append(ft.Text(f"Strings: {report['strings_count']} total, {len(report['suspicious_strings'])} suspicious"))
+            results.controls.append(
+                ft.Text(f"Entropy: {report['entropy']} ({report['entropy_verdict']})")
+            )
+            results.controls.append(
+                ft.Text(
+                    f"Strings: {report['strings_count']} total, "
+                    f"{len(report['suspicious_strings'])} suspicious"
+                )
+            )
             if report["suspicious_strings"]:
                 for s in report["suspicious_strings"][:20]:
                     results.controls.append(ft.Text(f"  {s}", size=11))
@@ -130,15 +139,19 @@ def run() -> None:
                     for sec in parsed["sections"]:
                         results.controls.append(ft.Text(f"  {sec}", size=11))
                 if "suspicious_imports" in parsed:
-                    results.controls.append(ft.Text(f"Suspicious imports: {parsed['suspicious_imports']}"))
+                    results.controls.append(
+                        ft.Text(
+                            f"Suspicious imports: {parsed['suspicious_imports']}"
+                        )
+                    )
             # Export buttons
             def on_export_json(_e) -> None:
-                out = export_json(report, f"scan_reports/{os.path.basename(path)}.json")
+                out = export_json(report, f"scan_reports/{os.path.basename(report['file'])}.json")
                 status.value = f"Exported JSON: {out}"
                 page.update()
 
             def on_export_pdf(_e) -> None:
-                out = export_pdf(report, f"scan_reports/{os.path.basename(path)}.pdf")
+                out = export_pdf(report, f"scan_reports/{os.path.basename(report['file'])}.pdf")
                 status.value = f"Exported PDF: {out}"
                 page.update()
 

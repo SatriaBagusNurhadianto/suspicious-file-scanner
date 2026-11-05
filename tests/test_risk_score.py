@@ -12,6 +12,12 @@ def test_low_risk_plain():
 
 
 def test_high_risk_packed_pe():
-    r = compute_risk("PE (Windows executable)", 7.9, ["kernel32.dll!VirtualAlloc"], ["http://evil.example"], ".exe")
+    r = compute_risk(
+        "PE (Windows executable)",
+        7.9,
+        ["kernel32.dll!VirtualAlloc"],
+        ["http://evil.example"],
+        ".exe",
+    )
     assert r.score >= 45
     assert r.level in ("high", "critical")

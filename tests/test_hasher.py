@@ -16,8 +16,8 @@ def test_compute_hashes_known_content():
         path = f.name
     try:
         result = compute_hashes(path)
-        assert result["md5"] == hashlib.md5(content).hexdigest()
-        assert result["sha1"] == hashlib.sha1(content).hexdigest()
+        assert result["md5"] == hashlib.md5(content).hexdigest()  # noqa: S324
+        assert result["sha1"] == hashlib.sha1(content).hexdigest()  # noqa: S324
         assert result["sha256"] == hashlib.sha256(content).hexdigest()
     finally:
         Path(path).unlink()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from suspicious_file_scanner.core.entropy import shannon_entropy, entropy_verdict
+from suspicious_file_scanner.core.entropy import entropy_verdict, shannon_entropy
 
 
 def test_zero_entropy_for_empty():
