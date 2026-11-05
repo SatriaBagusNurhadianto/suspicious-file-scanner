@@ -4,28 +4,28 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
 
 _MAX_KEYS_PER_ENTRY = 256
 _KEY_MAX_LEN = 256
+_MAX_TOTAL_KEYS = 10000
 
 
-def _cap_key(k: Any) -> str:
+def _cap_key(k):
     s = str(k)
     if len(s) > _KEY_MAX_LEN:
         s = s[:_KEY_MAX_LEN]
     return s
 
 
-def _edge_keys(report: dict) -> set[str]:
-    keys: set[str] = set()
+def _edge_keys(report):
+    keys = set()
     ss = report.get("suspicious_strings") or []
     for k in ss:
         if len(keys) >= _MAX_KEYS_PER_ENTRY:
             break
         keys.add("str:" + _cap_key(k))
-    imports = []
     parsed = report.get("parsed") or {}
+    imports = []
     if isinstance(parsed, dict):
         imports = parsed.get("suspicious_imports") or parsed.get("imports") or []
     for k in imports:
@@ -44,27 +44,32 @@ def _edge_keys(report: dict) -> set[str]:
 
 @dataclass
 class Graph:
-    nodes: dict[str, dict] = field(default_factory=dict)
-    edges: list[tuple[str, str, str]] = field(default_factory=list)
-    components: list[list[str]] = field(default_factory=list)
+    nodes: dict = field(default_factory=dict)
+    edges: list = field(default_factory=list)
+    components: list = field(default_factory=list)
     truncated: bool = False
     nodes_added: int = 0
     edges_added: int = 0
 
 
 def build_graph(store, limit=100, max_nodes=10000, max_edges=50000):
+    limit = max(1, min(int(limit), 1000))
+    max_nodes = max(1, min(int(max_nodes), 10000))
+    max_edges = max(1, min(int(max_edges), 50000))
     graph = Graph()
     try:
         entries = store.list(limit=limit)
     except Exception:  # noqa: BLE001
         return graph
-    # node_id -> set of keys
-    node_keys: dict[str, set[str]] = {}
-    # map hash -> node id
-    for entry in entries or []:
+    if not isinstance(entries, (list, tuple)):
+        return graph
+    entries = list(entries)[:limit]
+
+    node_keys = {}
+    total_keys = 0
+    for entry in entries:
         report = None
         if isinstance(entry, dict):
-            # HistoryStore.list returns summary rows; fetch full report.
             try:
                 full = store.get(entry.get("id"))
                 if isinstance(full, dict):
@@ -81,6 +86,7 @@ def build_graph(store, limit=100, max_nodes=10000, max_edges=50000):
             node_id = str(report.get("file", ""))
         if not node_id:
             continue
+        node_id = str(node_id)[:256]
         if node_id not in graph.nodes:
             if graph.nodes_added >= max_nodes:
                 graph.truncated = True
@@ -92,17 +98,22 @@ def build_graph(store, limit=100, max_nodes=10000, max_edges=50000):
             }
             graph.nodes_added += 1
             node_keys[node_id] = set()
-        node_keys[node_id].update(_edge_keys(report))
+        for k in _edge_keys(report):
+            if total_keys >= _MAX_TOTAL_KEYS:
+                graph.truncated = True
+                break
+            if k not in (kk for v in node_keys.values() for kk in v):
+                total_keys += 1
+            node_keys[node_id].add(k)
+        if graph.truncated:
+            break
 
-    # Build edges: connect nodes sharing a key.
-    # Group nodes by key.
-    key_to_nodes: dict[str, list[str]] = {}
+    key_to_nodes = {}
     for nid, keys in node_keys.items():
         for k in keys:
             key_to_nodes.setdefault(k, []).append(nid)
 
     for k, nids in key_to_nodes.items():
-        # connect consecutive pairs (star) to avoid O(n^2) edges per key
         for i in range(1, len(nids)):
             if graph.edges_added >= max_edges:
                 graph.truncated = True
@@ -114,17 +125,16 @@ def build_graph(store, limit=100, max_nodes=10000, max_edges=50000):
         if graph.truncated:
             break
 
-    # Connected components via iterative BFS.
-    adj: dict[str, set[str]] = {n: set() for n in graph.nodes}
+    adj = {n: set() for n in graph.nodes}
     for a, b, _k in graph.edges:
         adj.setdefault(a, set()).add(b)
         adj.setdefault(b, set()).add(a)
 
-    visited: set[str] = set()
+    visited = set()
     for start in graph.nodes:
         if start in visited:
             continue
-        comp: list[str] = []
+        comp = []
         dq = deque([start])
         visited.add(start)
         while dq:
