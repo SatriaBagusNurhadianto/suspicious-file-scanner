@@ -16,11 +16,17 @@ def _safe_dest(out_path: str | Path, limits: SafetyLimits | None = None) -> Path
     """
     if limits is None:
         limits = SafetyLimits()
+    if isinstance(out_path, (bytes, bytearray)):
+        if b"\x00" in bytes(out_path):
+            raise ValueError("invalid export path: null byte")
     p = Path(out_path)
+    # Reject empty / root / current-dir destinations and any null bytes.
+    if "\x00" in str(p) or not p.name:
+        raise ValueError("invalid export path: empty, root, or null byte")
     # Reject any traversal components.
     for part in p.parts:
         if part == "..":
-            raise ValueError("invalid export path: traversal or empty component")
+            raise ValueError("invalid export path: traversal component")
     # Resolve without following symlinks for the existing portion.
     # Reject if any existing component is a symlink.
     cur = Path(p.anchor) if p.is_absolute() else Path(".")
