@@ -60,7 +60,12 @@ def extract_strings(
 def _utf16_decode_runs(
     data: bytes, min_len: int, limits: SafetyLimits, le: bool = True
 ) -> list[str]:
-    """Extract UTF-16 (LE/BE) strings of at least *min_len* chars."""
+    """Extract UTF-16 (LE/BE) strings of at least *min_len* chars.
+
+    A trailing lone byte cannot form a code unit and is intentionally skipped.
+    When a run reaches ``max_string_length`` it stops growing but is still
+    emitted (truncated) at the next terminator.
+    """
     results: list[str] = []
     current: list[str] = []
     step = 2
