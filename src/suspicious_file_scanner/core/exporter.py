@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from .contracts import SafetyLimits
@@ -18,7 +19,7 @@ def _safe_dest(out_path: str | Path, limits: SafetyLimits | None = None) -> Path
     p = Path(out_path)
     # Reject any traversal components.
     for part in p.parts:
-        if part in ("..",) or part == "":
+        if part == "..":
             raise ValueError("invalid export path: traversal or empty component")
     # Resolve without following symlinks for the existing portion.
     # Reject if any existing component is a symlink.
@@ -27,14 +28,21 @@ def _safe_dest(out_path: str | Path, limits: SafetyLimits | None = None) -> Path
         if part in (p.anchor, "/", "\\"):
             continue
         cur = cur / part
-        if cur.exists() and cur.is_symlink():
+        if cur.is_symlink():
             raise ValueError("invalid export path: symlink component")
     if len(str(p)) > 4096:
         raise ValueError("invalid export path: too long")
     out = p
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Re-check parent isn't a symlink after creation.
-    if out.parent.is_symlink():
+    # Re-validate every component after creation (TOCTOU hardening).
+    cur = Path(p.anchor) if p.is_absolute() else Path(".")
+    for part in p.parts:
+        if part in (p.anchor, "/", "\\"):
+            continue
+        cur = cur / part
+        if cur.is_symlink():
+            raise ValueError("invalid export path: symlink component")
+    if out.is_symlink() or out.parent.is_symlink():
         raise ValueError("invalid export path: symlinked parent")
     return out
 
@@ -49,7 +57,11 @@ def export_json(report: dict, out_path: str | Path, limits: SafetyLimits | None 
 def _pdf_escape(text: str) -> str:
     # Escape characters that are special in PDF text strings.
     bs = chr(92)
-    return text.replace(bs, bs + bs).replace("(", bs + "(").replace(")", bs + ")")
+    text = text.replace(bs, bs + bs).replace("(", bs + "(").replace(")", bs + ")")
+    # Drop/replace control characters that can disrupt the PDF text stream.
+    text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", text)
+    return text
 
 
 def export_pdf(report: dict, out_path: str | Path, limits: SafetyLimits | None = None) -> Path:
