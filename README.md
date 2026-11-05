@@ -11,11 +11,8 @@ A **local desktop app** for static analysis of suspicious files. Files are never
 - Flag suspicious imports (e.g. `VirtualAlloc`, `WriteProcessMemory`)
 - Simple risk score with an explanation of why
 - Export report to JSON / PDF
-
-## Post-MVP
-
 - YARA rule matching
-- Scan history
+- Scan history (local SQLite, bounded retention)
 - Relationship graph between files
 
 ## Safety

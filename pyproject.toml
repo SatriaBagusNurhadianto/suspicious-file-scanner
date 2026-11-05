@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "suspicious-file-scanner"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local desktop app for static analysis of suspicious files. Files are never executed, nothing is uploaded."
 readme = "README.md"
 license = { text = "MIT" }
