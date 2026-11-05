@@ -25,3 +25,20 @@ jobs:
         run: ruff check src tests
       - name: Test
         run: pytest --cov=suspicious_file_scanner
+
+  test-strict:
+    runs-on: ubuntu-latest
+    env:
+      SFS_STRICT_MODE: "1"
+      SFS_MAX_FILE_SIZE: "104857600"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Test (strict mode)
+        run: pytest -m "not slow" --cov=suspicious_file_scanner
