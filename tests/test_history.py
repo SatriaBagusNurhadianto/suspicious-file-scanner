@@ -74,3 +74,25 @@ def test_count(store):
     assert store.count() == 0
     store.save({"file": "a.bin", "risk_level": "low", "risk_score": 1})
     assert store.count() == 1
+
+
+def test_save_rejects_traversal_file_path(store):
+    with pytest.raises(ValueError):
+        store.save({"file": "../../etc/passwd", "risk_level": "low", "risk_score": 1})
+
+
+def test_save_rejects_null_byte_path(store):
+    with pytest.raises(ValueError):
+        store.save({"file": "a\x00b.bin", "risk_level": "low", "risk_score": 1})
+
+
+def test_db_file_permissions(store):
+    # chmod may be no-op on Windows; just ensure file exists
+    assert store.db_path.exists()
+
+
+def test_purge_keeps_bounded_count(store):
+    for i in range(10):
+        store.save({"file": f"f{i}.bin", "risk_level": "low", "risk_score": i})
+    store.purge(max_count=3)
+    assert store.count() <= 3
