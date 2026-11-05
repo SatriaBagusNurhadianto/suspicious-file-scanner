@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from .contracts import SafetyLimits, read_capped
+
 # (magic bytes, offset, label)
 _SIGNATURES: list[tuple[bytes, int, str]] = [
     (b"MZ", 0, "PE (Windows executable)"),
@@ -21,20 +23,28 @@ _SIGNATURES: list[tuple[bytes, int, str]] = [
 ]
 
 
-def detect_file_type(path: str) -> str:
-    """Return a human-readable file type label based on magic bytes."""
-    try:
-        with open(path, "rb") as fh:
-            header = fh.read(64)
-    except OSError:
-        return "unknown (unreadable)"
-
+def _detect(header: bytes, path_hint: str = "") -> str:
     for magic, offset, label in _SIGNATURES:
         if header[offset : offset + len(magic)] == magic:
             return label
-
-    # Fallback: extension-based hint
-    ext = os.path.splitext(path)[1].lower()
+    ext = os.path.splitext(path_hint)[1].lower() if path_hint else ""
     if ext:
         return f"unknown (ext: {ext})"
     return "unknown (no signature)"
+
+
+def detect_file_type(source, limits: SafetyLimits | None = None) -> str:
+    """Return a human-readable file type label based on magic bytes.
+
+    *source* may be ``bytes``/``bytearray`` or a path.
+    """
+    if isinstance(source, (bytes, bytearray)):
+        return _detect(bytes(source)[:64])
+
+    if limits is None:
+        limits = SafetyLimits()
+    try:
+        data = read_capped(source, limits)
+    except (OSError, ValueError):
+        return "unknown (unreadable)"
+    return _detect(data[:64], str(source))

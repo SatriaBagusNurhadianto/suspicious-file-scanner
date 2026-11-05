@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from pathlib import Path
+
+from .contracts import SafetyLimits, read_capped
 
 
 def shannon_entropy(data: bytes) -> float:
@@ -21,10 +22,11 @@ def shannon_entropy(data: bytes) -> float:
     return round(entropy, 4)
 
 
-def file_entropy(path: str | Path) -> float:
-    """Compute Shannon entropy of the file at *path*."""
-    with open(path, "rb") as fh:
-        data = fh.read()
+def file_entropy(path, limits: SafetyLimits | None = None) -> float:
+    """Compute Shannon entropy of the file at *path*, enforcing size caps."""
+    if limits is None:
+        limits = SafetyLimits()
+    data = read_capped(path, limits)
     return shannon_entropy(data)
 
 
