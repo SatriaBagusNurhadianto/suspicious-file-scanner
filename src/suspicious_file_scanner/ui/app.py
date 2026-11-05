@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
     ft = None
 
 
-def scan_file(path: str) -> dict:
+def scan_file(path: str, rules_dir: str | None = None) -> dict:
     """Run the full static analysis pipeline on *path* and return a report."""
     import os as _os
 
@@ -79,6 +79,15 @@ def scan_file(path: str) -> dict:
 
     risk = compute_risk(ftype, entropy, suspicious_imports, suspicious_strings, ext)
 
+    yara_result = None
+    if rules_dir:
+        try:
+            from ..core.yara_matcher import match_yara
+
+            yara_result = match_yara(path, rules_dir, limits)
+        except Exception as exc:  # noqa: BLE001
+            yara_result = {"status": "error", "matches": [], "reason": str(exc), "rules_loaded": 0}
+
     report = {
         "file": path,
         "file_type": ftype,
@@ -91,6 +100,7 @@ def scan_file(path: str) -> dict:
         "risk_score": risk.score,
         "risk_level": risk.level,
         "risk_reasons": risk.reasons,
+        "yara": yara_result,
     }
     return report
 
