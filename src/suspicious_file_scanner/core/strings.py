@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+
+from .contracts import SafetyLimits, read_capped
 
 # Minimum length for a run of printable characters to count as a string.
 _MIN_LEN = 4
@@ -12,22 +13,21 @@ _MIN_LEN = 4
 _PRINTABLE = set(range(0x20, 0x7F)) | {0x09, 0x0A, 0x0D}
 
 
-def extract_strings(path: str | Path, min_len: int = _MIN_LEN) -> list[str]:
-    """Extract ASCII strings of at least *min_len* characters from *path*."""
+def _extract(data: bytes, min_len: int, limits: SafetyLimits) -> list[str]:
     results: list[str] = []
     current: list[str] = []
 
-    with open(path, "rb") as fh:
-        data = fh.read()
-
     for byte in data:
+        if len(results) >= limits.max_strings_count:
+            break
         if byte in _PRINTABLE:
-            current.append(chr(byte))
+            if len(current) < limits.max_string_length:
+                current.append(chr(byte))
         else:
             if len(current) >= min_len:
                 results.append("".join(current))
             current = []
-    if len(current) >= min_len:
+    if len(current) >= min_len and len(results) < limits.max_strings_count:
         results.append("".join(current))
 
     # De-duplicate while preserving order.
@@ -38,6 +38,23 @@ def extract_strings(path: str | Path, min_len: int = _MIN_LEN) -> list[str]:
             seen.add(s)
             unique.append(s)
     return unique
+
+
+def extract_strings(
+    source, min_len: int = _MIN_LEN, limits: SafetyLimits | None = None
+) -> list[str]:
+    """Extract ASCII strings of at least *min_len* characters.
+
+    *source* may be ``bytes``/``bytearray`` or a path. Caps from *limits*
+    are enforced (count and per-string length).
+    """
+    if limits is None:
+        limits = SafetyLimits()
+    if isinstance(source, (bytes, bytearray)):
+        data = bytes(source)
+    else:
+        data = read_capped(source, limits)
+    return _extract(data, min_len, limits)
 
 
 def find_suspicious_strings(strings: list[str]) -> list[str]:

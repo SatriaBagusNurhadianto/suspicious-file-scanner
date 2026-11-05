@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 try:
     from ..core.elf_parser import parse_elf as _parse_elf
-    from ..core.entropy import entropy_verdict, file_entropy
+    from ..core.entropy import entropy_verdict, shannon_entropy
     from ..core.exporter import export_json, export_pdf
     from ..core.filetype import detect_file_type
     from ..core.hasher import compute_hashes
@@ -19,7 +19,7 @@ try:
     from ..core.strings import extract_strings, find_suspicious_strings
 except ImportError:
     from core.elf_parser import parse_elf as _parse_elf
-    from core.entropy import entropy_verdict, file_entropy
+    from core.entropy import entropy_verdict, shannon_entropy
     from core.exporter import export_json, export_pdf
     from core.filetype import detect_file_type
     from core.hasher import compute_hashes
@@ -37,20 +37,46 @@ def scan_file(path: str) -> dict:
     """Run the full static analysis pipeline on *path* and return a report."""
     import os as _os
 
-    hashes = compute_hashes(path)
-    ftype = detect_file_type(path)
-    entropy = file_entropy(path)
-    strings = extract_strings(path)
+    from ..core.contracts import SafetyLimits, read_capped
+
+    limits = SafetyLimits.from_env()
+
+    # Path validation: must be a regular file, no symlinks.
+    if not _os.path.isfile(path):
+        raise ValueError("not a regular file")
+    if _os.path.islink(path):
+        raise ValueError("symlinks are not allowed")
+
+    size = _os.path.getsize(path)
+    if size > limits.max_file_size:
+        raise ValueError(f"file too large: {size} bytes > {limits.max_file_size}")
+
+    data = read_capped(path, limits)
+
+    hashes = compute_hashes(data)
+    ftype = detect_file_type(data, limits)
+    entropy = shannon_entropy(data)
+    strings = extract_strings(data, limits=limits)
     suspicious_strings = find_suspicious_strings(strings)
     ext = _os.path.splitext(path)[1]
 
     parsed: dict = {}
+    suspicious_imports: list[str] = []
     if "PE" in ftype:
-        parsed = parse_pe(path)
+        res = parse_pe(data, limits)
+        if res.ok and res.data:
+            parsed = res.data
+            suspicious_imports = parsed.get("suspicious_imports", [])
+        else:
+            parsed = {"error": "; ".join(res.errors) or res.skipped_reason or "parse failed"}
     elif "ELF" in ftype:
-        parsed = parse_elf_safe(path)
+        res = _parse_elf(data, limits)
+        if res.ok and res.data:
+            parsed = res.data
+            suspicious_imports = parsed.get("suspicious_imports", [])
+        else:
+            parsed = {"error": "; ".join(res.errors) or res.skipped_reason or "parse failed"}
 
-    suspicious_imports = parsed.get("suspicious_imports", []) if isinstance(parsed, dict) else []
     risk = compute_risk(ftype, entropy, suspicious_imports, suspicious_strings, ext)
 
     report = {
