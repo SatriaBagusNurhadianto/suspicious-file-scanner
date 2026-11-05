@@ -100,3 +100,27 @@ def test_match_yara_path_input(limits):
             _write_rule(rules, "r.yar", 'rule r { condition: true }')
         res = match_yara(str(target), rules_dir=str(rules), limits=limits)
         assert res["status"] in ("ok", "skipped")
+
+
+@pytest.mark.skipif(not _YARA_AVAILABLE, reason="yara not installed")
+def test_match_yara_oversized_file(limits):
+    with tempfile.TemporaryDirectory() as d:
+        big = Path(d) / "big.bin"
+        big.write_bytes(b"A" * (limits.max_file_size + 1))
+        rules = Path(d) / "rules"
+        rules.mkdir()
+        Path(rules, "r.yar").write_text('rule r { condition: true }')
+        res = match_yara(str(big), rules_dir=str(rules), limits=limits)
+        assert res["status"] == "error"
+        assert "too large" in res["reason"] or "too large" in str(res["reason"])
+
+
+@pytest.mark.skipif(not _YARA_AVAILABLE, reason="yara not installed")
+def test_match_yara_oversized_bytes(limits):
+    with tempfile.TemporaryDirectory() as d:
+        rules = Path(d) / "rules"
+        rules.mkdir()
+        Path(rules, "r.yar").write_text('rule r { condition: true }')
+        big = b"A" * (limits.max_file_size + 1)
+        res = match_yara(big, rules_dir=str(rules), limits=limits)
+        assert res["status"] == "error"

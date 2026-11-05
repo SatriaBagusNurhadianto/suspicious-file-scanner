@@ -2,6 +2,10 @@
 
 YARA is an optional dependency. If ``yara-python`` is not installed,
 ``match_yara`` returns a result with status ``"skipped"`` instead of raising.
+
+Note: compile/match timeouts use daemon threads; a timed-out YARA call may
+keep running in the background. yara's own ``timeout`` param is passed for
+match. Stronger isolation (process-based) is a separate concern.
 """
 
 from __future__ import annotations
@@ -168,8 +172,20 @@ def match_yara(path, rules_dir=None, limits=None):
     except Exception as exc:  # noqa: BLE001
         return _error(f"compile failed: {exc}", len(filepaths))
 
+    # Cap the target size (SEC-YARA-01): read through a capped reader so a
+    # swap/growth between stat and match is rejected, not partially scanned.
     try:
-        raw_matches = _match_with_timeout(rules, path, _MATCH_TIMEOUT)
+        if isinstance(path, (bytes, bytearray)):
+            if len(path) > limits.max_file_size:
+                return _error("target too large")
+            data = bytes(path)
+        else:
+            data = read_capped(path, limits)
+    except (ValueError, OSError) as exc:
+        return _error(f"target read failed: {exc}", len(filepaths))
+
+    try:
+        raw_matches = _match_with_timeout(rules, data, _MATCH_TIMEOUT)
     except Exception as exc:  # noqa: BLE001
         return _error(f"match failed: {exc}", len(filepaths))
 
